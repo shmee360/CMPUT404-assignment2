@@ -13,6 +13,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+# Modifications copyright © 2021 Warren Stix
 
 # Do not use urllib's HTTP GET and POST mechanisms.
 # Write your own HTTP GET and POST
