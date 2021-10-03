@@ -25,22 +25,47 @@ import socket
 import re
 # you may use urllib to encode data appropriately
 import urllib.parse
+from functools import reduce
+
+S_TO_P = {'http': 80, 'https': 443}
 
 def help():
     print("httpclient.py [GET/POST] [URL]\n")
 
 class HTTPResponse(object):
-    def __init__(self, code=200, body=""):
+    def __init__(self, code:int=200, body:str=""):
         self.code = code
         self.body = body
 
 class HTTPClient(object):
-    #def get_host_port(self,url):
+    user_agent = 'User-Agent: stix_req/1.0\r\n'
 
-    def connect(self, host, port):
+    @staticmethod
+    def get_host_port(url: str):
+        parse = urllib.parse.urlparse(url)
+        port = S_TO_P[str(parse.scheme)] if parse.port is None else parse.port
+
+        return (str(parse.hostname), port)
+
+    @staticmethod
+    def get_path(url: str) -> str:
+        return urllib.parse.urlparse(url).path
+
+    @staticmethod
+    def get_argstr(args):
+        if args is None:
+            return ('', 0)
+
+        argstr = reduce(lambda x, y: x + y[0] + '=' + y[1] + '&',
+                        args.items(), '')[:-1]
+        arglen = reduce(lambda x, y: x + len(y[0]) + len(y[1]) + 1,
+                        args.items(), 0)
+
+        return (argstr, arglen)
+
+    def connect(self, host: str, port: int):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.connect((host, port))
-        return None
 
     def get_code(self, data: str):
         return int(data.split()[1])
@@ -49,17 +74,17 @@ class HTTPClient(object):
         for header in data.split('\r\n\r\n')[0].split('\r\n')[1:]:
             yield header.encode()
 
-    def get_body(self, data):
+    def get_body(self, data: str) -> str:
         return data.split('\r\n\r\n')[1]
     
-    def sendall(self, data):
+    def sendall(self, data: str):
         self.socket.sendall(data.encode('utf-8'))
         
     def close(self):
         self.socket.close()
 
     # read everything from the socket
-    def recvall(self, sock):
+    def recvall(self, sock: socket.socket):
         buffer = bytearray()
         done = False
         while not done:
@@ -70,14 +95,58 @@ class HTTPClient(object):
                 done = not part
         return buffer.decode('utf-8')
 
-    def GET(self, url, args=None):
-        code = 500
-        body = ""
+    def GET(self, url: str, args=None):
+        path = self.get_path(url)
+        (host, port) = self.get_host_port(url)
+        (argstr, arglen) = self.get_argstr(args)
+
+        req = (f'GET {path} HTTP/1.1\r\n'
+               f'Host: {host}\r\n' +
+               self.user_agent +
+               'Accept: */*\r\n'
+               f'Content-Length: {arglen}\r\n'
+               'Connection: close\r\n'
+               '\r\n' +
+               argstr)
+
+        self.connect(host, port)
+
+        self.sendall(req)
+        data = self.recvall(self.socket)
+        
+        self.close()
+
+        code = self.get_code(data)
+        body = self.get_body(data)
+
         return HTTPResponse(code, body)
 
-    def POST(self, url, args=None):
-        code = 500
-        body = ""
+    def POST(self, url: str, args=None):
+        path = self.get_path(url)
+        (host, port) = self.get_host_port(url)
+        (argstr, arglen) = self.get_argstr(args)
+
+        req = (f'POST {path} HTTP/1.1\r\n'
+               f'Host: {host}\r\n' +
+               self.user_agent +
+               'Accept: */*\r\n'
+               'Accept-Language: en-US,en;q=0.9\r\n'
+               'Content-Type: application/x-www-form-urlencoded\r\n'
+               f'Content-Length: {arglen}\r\n'
+               'Connection: close\r\n'
+               '\r\n' +
+               argstr)
+
+        self.connect(host, port)
+
+        self.sendall(req)
+        data = self.recvall(self.socket)
+        
+        self.close()
+
+        code = self.get_code(data)
+        body = self.get_body(data)
+
         return HTTPResponse(code, body)
 
     def command(self, url, command="GET", args=None):
