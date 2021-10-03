@@ -54,14 +54,12 @@ class HTTPClient(object):
     @staticmethod
     def get_argstr(args):
         if args is None:
-            return ('', 0)
+            return ''
 
-        argstr = reduce(lambda x, y: x + y[0] + '=' + y[1] + '&',
+        argstr = reduce(lambda a, x: a + x[0] + '=' + x[1] + '&',
                         args.items(), '')[:-1]
-        arglen = reduce(lambda x, y: x + len(y[0]) + len(y[1]) + 1,
-                        args.items(), 0)
 
-        return (argstr, arglen)
+        return urllib.parse.quote_plus(argstr, '&=')
 
     def connect(self, host: str, port: int):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -71,8 +69,13 @@ class HTTPClient(object):
         return int(data.split()[1])
 
     def get_headers(self, data: str):
-        for header in data.split('\r\n\r\n')[0].split('\r\n')[1:]:
-            yield header.encode()
+        headers = {}
+
+        for h in data.split('\r\n\r\n')[0].split('\r\n')[1:]:
+            (k, v) = h.split(': ')
+            headers[k] = v
+
+        return headers
 
     def get_body(self, data: str) -> str:
         return data.split('\r\n\r\n')[1]
@@ -98,13 +101,13 @@ class HTTPClient(object):
     def GET(self, url: str, args=None):
         path = self.get_path(url)
         (host, port) = self.get_host_port(url)
-        (argstr, arglen) = self.get_argstr(args)
+        argstr = self.get_argstr(args)
 
         req = (f'GET {path} HTTP/1.1\r\n'
                f'Host: {host}\r\n' +
                self.user_agent +
                'Accept: */*\r\n'
-               f'Content-Length: {arglen}\r\n'
+               f'Content-Length: {len(argstr)}\r\n'
                'Connection: close\r\n'
                '\r\n' +
                argstr)
@@ -124,7 +127,7 @@ class HTTPClient(object):
     def POST(self, url: str, args=None):
         path = self.get_path(url)
         (host, port) = self.get_host_port(url)
-        (argstr, arglen) = self.get_argstr(args)
+        argstr = self.get_argstr(args)
 
         req = (f'POST {path} HTTP/1.1\r\n'
                f'Host: {host}\r\n' +
@@ -132,7 +135,7 @@ class HTTPClient(object):
                'Accept: */*\r\n'
                'Accept-Language: en-US,en;q=0.9\r\n'
                'Content-Type: application/x-www-form-urlencoded\r\n'
-               f'Content-Length: {arglen}\r\n'
+               f'Content-Length: {len(argstr)}\r\n'
                'Connection: close\r\n'
                '\r\n' +
                argstr)
